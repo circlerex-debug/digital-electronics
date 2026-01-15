@@ -4,18 +4,27 @@ export enum TaskType {
   TASK2 = 'TASK2'  // 鍵盤輸入顯示裝置
 }
 
+// Added Difficulty enum for task difficulty levels as required by geminiService.ts
 export enum Difficulty {
-  SIMPLE = 'SIMPLE',   // 初階填空
-  ADVANCED = 'ADVANCED' // 進階自由寫
+  SIMPLE = 'SIMPLE',
+  ADVANCED = 'ADVANCED'
 }
 
 export interface ReviewResult {
   hasError: boolean;
   score: number; // 0-100
+  // Made blankResults optional to allow ReviewResult to be used for AI analysis which doesn't provide these
+  blankResults?: {
+    index: number;
+    userValue: string;
+    correctValue: string;
+    isCorrect: boolean;
+  }[];
   errors: string[];
   suggestions: string[];
-  commentedCode: string; // 帶有註解的示範程式碼
-  expectedOutput: string;
+  // Added optional fields for AI analysis results
+  commentedCode?: string;
+  expectedOutput?: string;
 }
 
 export interface ExamParams {

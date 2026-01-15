@@ -1,33 +1,33 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  Terminal, CheckCircle2, AlertCircle, Cpu, Keyboard, 
-  Calendar, Hash, RefreshCcw, Info, Trophy, 
-  GraduationCap, Code, Settings, X, Key, ExternalLink, Send,
-  PartyPopper, Sparkles, Heart, Rocket
+  Terminal, Cpu, Trophy, Settings, X, Send,
+  PartyPopper, Sparkles, Heart, Timer, Play, HelpCircle,
+  RotateCcw, AlertCircle
 } from 'lucide-react';
-import { TaskType, ExamParams, ReviewResult, Difficulty } from './types';
+import { TaskType, ExamParams, ReviewResult } from './types';
 import { SEGMENT_MAP } from './constants';
-import { analyzeVerilogCode } from './services/geminiService';
 import SevenSegment from './components/SevenSegment';
 
 const ENCOURAGING_MESSAGES = [
-  "設定成功！工程師魂燃燒吧！🔥",
-  "太棒了！離拿到乙級證照又近了一步！🎓",
-  "加油加油！這題一定難不倒你的！🚀",
-  "準備好開始練習了嗎？祝你考試順利！✨",
-  "API Key 已就緒，準備寫出完美的代碼吧！💻"
+  "準備就緒！挑戰開始，專注每一行邏輯！🔥",
+  "計時啟動！全代碼隨機挖空，考驗你的真本領！🎓",
+  "每一行 Verilog 都是關鍵，細心填寫！🚀",
+  "挑戰自我，這就是通往證照的捷徑！✨",
+  "冷靜應對隨機空格，你是邏輯大師！💻"
 ];
 
 const App: React.FC = () => {
   const [activeTask, setActiveTask] = useState<TaskType>(TaskType.TASK1);
-  const [difficulty, setDifficulty] = useState<Difficulty>(Difficulty.SIMPLE);
-  const [params, setParams] = useState<ExamParams>({
-    day: '10', 
-    stationId: '05'
-  });
+  const [params, setParams] = useState<ExamParams>({ day: '10', stationId: '05' });
+  const [refreshNonce, setRefreshNonce] = useState(0); 
   
-  const [code, setCode] = useState<string>('');
+  const [isAnswering, setIsAnswering] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [showHints, setShowHints] = useState(false);
+  
+  const [blankIndices, setBlankIndices] = useState<number[]>([]);
+  const [userInputs, setUserInputs] = useState<Record<number, string>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<ReviewResult | null>(null);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
@@ -37,141 +37,138 @@ const App: React.FC = () => {
   const [showCheer, setShowCheer] = useState(false);
   const [cheerMsg, setCheerMsg] = useState("");
 
-  const getTemplate = (task: TaskType, diff: Difficulty, p: ExamParams) => {
-    const dd = p.day.padStart(2, '0');
-    const ss = p.stationId.padStart(2, '0');
+  const timerRef = useRef<number | null>(null);
 
-    if (diff === Difficulty.ADVANCED) {
-      return task === TaskType.TASK1 
-        ? `module no1(input ck, output reg[3:0] s, output reg[7:0] seg);\n  // 試題一：四位數顯示裝置\n  // 目標格式：日期.崗位編號 (例如：${dd}.${ss})\n  // 請撰寫完整的除頻、掃描與多工顯示邏輯\nendmodule`
-        : `module no2(input ck, output reg[6:0] s, output reg[3:0] R, input[2:0] C);\n  // 試題二：鍵盤輸入顯示裝置\n  // 請撰寫鍵盤掃描 (R與C) 與七段解碼邏輯\nendmodule`;
-    }
+  const taskData = useMemo(() => {
+    const dd = params.day.padStart(2, '0');
+    const ss = params.stationId.padStart(2, '0');
     
-    if (task === TaskType.TASK1) {
-      return `module no1(input ck, output reg[3:0] s, output reg[7:0] seg);
-  reg [13:0] t;
-  always@(posedge ck) t <= t + 1;
-  
-  always@(posedge t[13])
-  case(s)
-    4'b0001 : begin s <= 4'b0010; seg <= /* 顯示日期十位: ${dd[0]} */; end
-    4'b0010 : begin s <= 4'b0100; seg <= /* 顯示日期個位加點: ${dd[1]}. */; end
-    4'b0100 : begin s <= 4'b1000; seg <= /* 顯示崗位十位: ${ss[0]} */; end
-    default : begin s <= 4'b0001; seg <= /* 顯示崗位個位: ${ss[1]} */; end
-  endcase
-endmodule`;
+    if (activeTask === TaskType.TASK1) {
+      return [
+        { code: "module no1(input ck, output reg[3:0] s, output reg[7:0] seg);", hint: "定義 I/O" },
+        { code: "  reg [13:0] t;", hint: "計數器暫存器" },
+        { code: "  always@(posedge ck) t <= t + 1;", hint: "除頻計數" },
+        { code: "  always@(posedge t[13])", hint: "掃描時脈" },
+        { code: "  case(s)", hint: "掃描判斷" },
+        { code: `    4'b0001 : begin s <= 4'b0010; seg <= 8'b${SEGMENT_MAP[dd[0]]}; end`, hint: `顯示日期十位 [${dd[0]}]` },
+        { code: `    4'b0010 : begin s <= 4'b0100; seg <= 8'b1${SEGMENT_MAP[dd[1]].substring(1)}; end`, hint: `顯示日期個位 [${dd[1]}]` },
+        { code: `    4'b0100 : begin s <= 4'b1000; seg <= 8'b${SEGMENT_MAP[ss[0]]}; end`, hint: `顯示崗位十位 [${ss[0]}]` },
+        { code: `    default : begin s <= 4'b0001; seg <= 8'b${SEGMENT_MAP[ss[1]]}; end`, hint: `顯示崗位個位 [${ss[1]}]` },
+        { code: "  endcase", hint: "結束判斷" },
+        { code: "endmodule", hint: "結束模組" }
+      ];
+    } else {
+      return [
+        { code: "module no2(input ck, output reg[6:0] s, output reg [3:0] R, input [2:0] C);", hint: "定義 I/O" },
+        { code: "  always @ (posedge ck)", hint: "掃描時脈" },
+        { code: "  case (R)", hint: "列掃描判斷" },
+        { code: "    4'b1110: begin // Row 1", hint: "掃描第一列" },
+        { code: "      if(C == 3'b110) s <= 7'b0000110; // 1", hint: "鍵位 1" },
+        { code: "      if(C == 3'b101) s <= 7'b1011011; // 2", hint: "鍵位 2" },
+        { code: "      R <= 4'b1101;", hint: "切換列" },
+        { code: "    end", hint: "結束列1" },
+        { code: "    4'b1101: begin // Row 2", hint: "掃描第二列" },
+        { code: "      if(C == 3'b110) s <= 7'b1100110; // 4", hint: "鍵位 4" },
+        { code: "      if(C == 3'b101) s <= 7'b1101101; // 5", hint: "鍵位 5" },
+        { code: "      R <= 4'b1011;", hint: "切換列" },
+        { code: "    end", hint: "結束列2" },
+        { code: "    4'b0111: begin // Row 4", hint: "掃描第四列" },
+        { code: "      if(C == 3'b110) s <= 7'b1011000; // *", hint: "鍵位 *" },
+        { code: "      if(C == 3'b101) s <= 7'b0111111; // 0", hint: "鍵位 0" },
+        { code: "      if(C == 3'b011) s <= 7'b1001100; // #", hint: "鍵位 #" },
+        { code: "      R <= 4'b1110;", hint: "回歸列1" },
+        { code: "    end", hint: "結束列4" },
+        { code: "    default: R <= 4'b1110;", hint: "預設列" },
+        { code: "  endcase", hint: "結束鍵盤判斷" },
+        { code: "endmodule", hint: "結束模組" }
+      ];
     }
+  }, [activeTask, params.day, params.stationId]);
+
+  const fullCodeLines = useMemo(() => taskData.map(d => d.code), [taskData]);
+
+  const generateBlanks = () => {
+    const indices = Array.from({ length: fullCodeLines.length }, (_, i) => i);
+    const validIndices = indices.filter(idx => {
+      const t = fullCodeLines[idx].trim();
+      return t.length > 2 && !t.startsWith('//');
+    });
+    const shuffled = [...validIndices].sort(() => 0.5 - Math.random());
+    setBlankIndices(shuffled.slice(0, 5).sort((a, b) => a - b));
+    setUserInputs({});
+  };
+
+  const normalize = (s: string) => s.replace(/\s+/g, '').replace(/;/g, '').trim();
+
+  // 開始目前所選題目的挑戰
+  const handleStartChallenge = () => {
+    setRefreshNonce(prev => prev + 1); 
+    setIsAnswering(true);
+    setResult(null);
+    setSeconds(0);
+    setCheerMsg(ENCOURAGING_MESSAGES[Math.floor(Math.random() * ENCOURAGING_MESSAGES.length)]);
+    setShowCheer(true);
+    setTimeout(() => setShowCheer(false), 3000);
+
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = window.setInterval(() => setSeconds(s => s + 1), 1000);
+  };
+
+  const handleGrade = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsAnalyzing(true);
     
-    return `module no2(input ck, output reg[6:0] s, output reg [3:0] R, input [2:0] C); 
-  always @ (posedge ck)
-  case (R)
-    4'b1110: begin // 第一列 1, 2, 3
-      if(C == 3'b110) s <= 7'b1111001; // 1
-      if(C == 3'b101) s <= /* 數字2顯示碼 */;
-      R <= 4'b1101;
-    end
-    4'b1101: begin // 第二列 4, 5, 6
-      /* 填入 4, 5, 6 判斷邏輯 */
-      R <= 4'b1011;
-    end
-    4'b1011: begin // 第三列 7, 8, 9
-      /* 填入 7, 8, 9 判斷邏輯 */
-      R <= 4'b0111;
-    end
-    4'b0111: begin // 第四列 *, 0, #
-      if(C == 3'b110) s <= /* * 顯示 c (編碼 01011000) */;
-      if(C == 3'b101) s <= 7'b0111111; // 0
-      if(C == 3'b011) s <= /* # 顯示 倒反C (編碼 01001100) */;
-      R <= 4'b1110;
-    end
-    default: R <= 4'b1110;
-  endcase
-endmodule`;
+    const blankResults = blankIndices.map(idx => {
+      const userVal = (userInputs[idx] || "").trim();
+      const correctVal = fullCodeLines[idx].trim();
+      return {
+        index: idx,
+        userValue: userVal,
+        correctValue: correctVal,
+        isCorrect: normalize(userVal) === normalize(correctVal)
+      };
+    });
+
+    const correctCount = blankResults.filter(r => r.isCorrect).length;
+    setResult({
+      hasError: correctCount < 5,
+      score: correctCount * 20,
+      blankResults,
+      errors: [],
+      suggestions: [`耗時：${Math.floor(seconds / 60)}分${seconds % 60}秒`, correctCount === 5 ? "邏輯完全正確！" : "請參考標準解答修正錯誤之處。"]
+    });
+    setIsAnalyzing(false);
+    setIsAnswering(false);
   };
 
   useEffect(() => {
-    setCode(getTemplate(activeTask, difficulty, params));
+    generateBlanks();
     setResult(null);
-  }, [activeTask, difficulty, params.day, params.stationId]);
-
-  const handleSaveApiKey = () => {
-    localStorage.setItem('gemini_api_key', apiKey);
-    setShowSettings(false);
-    
-    // 觸發加油打氣特效
-    const randomMsg = ENCOURAGING_MESSAGES[Math.floor(Math.random() * ENCOURAGING_MESSAGES.length)];
-    setCheerMsg(randomMsg);
-    setShowCheer(true);
-    setTimeout(() => setShowCheer(false), 4000);
-  };
-
-  const handleAnalyze = async () => {
-    if (!apiKey) {
-      setShowSettings(true);
-      return;
-    }
-    setIsAnalyzing(true);
-    const res = await analyzeVerilogCode(activeTask, difficulty, code, params, apiKey);
-    setResult(res);
-    setIsAnalyzing(false);
-  };
-
-  const getTask1Digits = () => {
-    const dd = params.day.padStart(2, '0');
-    const ss = params.stationId.padStart(2, '0');
-    return [dd[0], dd[1] + '.', ss[0], ss[1]];
-  };
-
-  const getTask2Display = (key: string | null) => {
-    if (!key) return '00000000';
-    if (key === '*') return SEGMENT_MAP['c'];
-    if (key === '#') return SEGMENT_MAP['revC'];
-    return SEGMENT_MAP[key] || '00000000';
-  };
+  }, [activeTask, refreshNonce, params.day, params.stationId]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 relative">
-      {/* 全域打氣橫幅 */}
       {showCheer && (
-        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top duration-500">
-          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white px-8 py-4 rounded-full shadow-2xl flex items-center gap-4 border border-white/20">
-            <div className="animate-bounce"><PartyPopper className="text-yellow-300" /></div>
-            <span className="font-black tracking-wide whitespace-nowrap">{cheerMsg}</span>
-            <div className="animate-pulse"><Sparkles className="text-yellow-300" /></div>
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-10 zoom-in-95 duration-500">
+          <div className="bg-indigo-600 text-white px-10 py-5 rounded-full shadow-2xl flex items-center gap-4 border-4 border-indigo-400">
+            <PartyPopper className="text-yellow-300 animate-bounce" size={32} />
+            <span className="text-xl font-black tracking-widest">{cheerMsg}</span>
+            <Sparkles className="text-yellow-300 animate-pulse" size={32} />
           </div>
         </div>
       )}
 
-      {/* 設定 Modal */}
       {showSettings && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-5 bg-slate-50 border-b flex items-center justify-between">
-              <h3 className="font-bold text-slate-700 flex items-center gap-2">
-                <Settings size={20} className="text-indigo-500" /> API 設定
-              </h3>
-              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20}/></button>
+              <h3 className="font-bold text-slate-700 flex items-center gap-2"><Settings size={20} className="text-indigo-500" /> 設定</h3>
+              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
             </div>
-            <div className="p-6 space-y-5">
-              <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Gemini API Key</label>
-                <div className="relative">
-                  <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <input 
-                    type="password" 
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
-                    placeholder="貼上你的 API Key"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                  />
-                </div>
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-xs text-indigo-600 flex items-center gap-1 hover:underline">
-                  獲取免費金鑰 <ExternalLink size={12}/>
-                </a>
-              </div>
-              <button onClick={handleSaveApiKey} className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2">
-                <Rocket size={18} /> 儲存設定，開始練習！
-              </button>
+            <div className="p-6">
+              <label className="text-xs font-black text-slate-400 uppercase mb-2 block">API Key (可選)</label>
+              <input type="password" className="w-full px-4 py-3 bg-slate-50 border rounded-xl mb-6 outline-none font-mono" value={apiKey} onChange={e => setApiKey(e.target.value)} />
+              <button onClick={() => { localStorage.setItem('gemini_api_key', apiKey); setShowSettings(false); }} className="w-full py-4 bg-indigo-600 text-white font-black rounded-xl shadow-lg transition-transform active:scale-95">儲存設定</button>
             </div>
           </div>
         </div>
@@ -179,40 +176,32 @@ endmodule`;
 
       <header className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-xl shadow-indigo-200 relative group">
-            <Cpu size={32}/>
-            <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Sparkles className="text-yellow-400 animate-pulse" size={16} />
-            </div>
-          </div>
+          <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-xl"><Cpu size={32}/></div>
           <div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-              數位電子乙級 Verilog 練習助手
-              <span className="hidden md:inline-block"><Heart className="text-rose-500 fill-rose-500" size={16}/></span>
+              數位電子乙級：術科練習
+              {(isAnswering || result) && <span className="flex items-center gap-2 bg-indigo-100 px-3 py-1 rounded-full text-indigo-700 text-sm animate-pulse ml-2 font-mono"><Timer size={14}/> {Math.floor(seconds/60)}:{(seconds%60).toString().padStart(2,'0')}</span>}
             </h1>
-            <div className="flex gap-2 text-slate-400 text-xs font-bold mt-1">
-              <span className="flex items-center gap-1 text-indigo-500"><CheckCircle2 size={12}/> AI 診斷</span>
-              <span className="flex items-center gap-1"><CheckCircle2 size={12}/> 硬體模擬</span>
-              <span className="flex items-center gap-1"><CheckCircle2 size={12}/> 乙級規範</span>
-            </div>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">Select Task & Start Random Challenge</p>
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <div className="bg-white p-1 rounded-2xl shadow-sm border border-slate-200 flex">
-            {[Difficulty.SIMPLE, Difficulty.ADVANCED].map(d => (
-              <button 
-                key={d}
-                onClick={() => setDifficulty(d)}
-                className={`px-4 py-2 rounded-xl text-sm font-black transition-all ${difficulty === d ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}
-              >
-                {d === Difficulty.SIMPLE ? '初階填空' : '進階自由寫'}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setShowSettings(true)} className={`p-2.5 rounded-2xl border transition-all relative ${!apiKey ? 'bg-amber-50 border-amber-200 text-amber-500 animate-pulse' : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'}`}>
-            <Settings size={22}/>
-            {!apiKey && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>}
+        <div className="flex items-center gap-4">
+          {!isAnswering && !result ? (
+            <button onClick={handleStartChallenge} className="flex items-center gap-3 px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-200 transition-all active:scale-95 group">
+              <Play className="fill-white group-hover:scale-110 transition-transform" size={20} /> 開始挑戰
+            </button>
+          ) : isAnswering ? (
+            <button onClick={handleGrade} disabled={isAnalyzing} className="flex items-center gap-3 px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black shadow-lg shadow-indigo-200 transition-all active:scale-95">
+              <Send size={20} /> {isAnalyzing ? '正在評分...' : '提交評分'}
+            </button>
+          ) : (
+            <button onClick={handleStartChallenge} className="flex items-center gap-3 px-8 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black shadow-lg shadow-amber-200 transition-all active:scale-95 group">
+              <RotateCcw className="group-hover:rotate-180 transition-transform duration-500" size={20} /> 再次挑戰 (重新挖空)
+            </button>
+          )}
+          <button onClick={() => setShowSettings(true)} className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:bg-slate-50 transition-all shadow-sm">
+            <Settings size={20} />
           </button>
         </div>
       </header>
@@ -220,63 +209,36 @@ endmodule`;
       <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 space-y-6">
           <section className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-            <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">環境參數設定</h2>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500">應考日期 (日)</label>
-                  <input type="text" maxLength={2} value={params.day} onChange={e=>setParams({...params, day: e.target.value})} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-center" placeholder="DD" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-500">崗位編號</label>
-                  <input type="text" maxLength={2} value={params.stationId} onChange={e=>setParams({...params, stationId: e.target.value})} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-center" placeholder="01" />
-                </div>
+            <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">術科參數配置 (DD.SS)</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500">日期 (DD)</label>
+                <input type="text" maxLength={2} value={params.day} onChange={e=>setParams({...params, day: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border rounded-xl font-black text-center disabled:opacity-50 transition-all focus:border-indigo-500 outline-none" disabled={isAnswering} />
               </div>
-              <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 flex gap-3 items-start">
-                <Info size={18} className="text-indigo-600 mt-0.5 shrink-0" />
-                <div className="text-xs text-indigo-900 leading-relaxed font-medium">
-                  <strong>當前任務目標：</strong>
-                  {activeTask === TaskType.TASK1 
-                    ? `顯示「日期.崗位」，當前預期顯示：${params.day.padStart(2, '0')}.${params.stationId.padStart(2, '0')}` 
-                    : '鍵盤掃描邏輯練習：按數字鍵顯示數字，按 * 顯示 c，按 # 顯示倒反的 C。'}
-                </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500">崗位 (SS)</label>
+                <input type="text" maxLength={2} value={params.stationId} onChange={e=>setParams({...params, stationId: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border rounded-xl font-black text-center disabled:opacity-50 transition-all focus:border-indigo-500 outline-none" disabled={isAnswering} />
               </div>
             </div>
           </section>
 
           <section className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-10"><Cpu size={120} /></div>
-            <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8">硬體即時模擬器</h2>
-            
-            <div className="flex flex-col items-center gap-10">
-              <div className="bg-slate-800 p-10 rounded-[2rem] border-[8px] border-slate-700 flex gap-5 shadow-inner">
+            <div className="absolute top-0 right-0 p-4 opacity-10"><Cpu size={64} className="text-white"/></div>
+            <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8 text-center relative z-10">硬體模擬看板</h2>
+            <div className="flex flex-col items-center gap-8 relative z-10">
+              <div className="bg-slate-800 p-8 rounded-[2rem] border-[6px] border-slate-700 flex gap-4 shadow-inner">
                 {activeTask === TaskType.TASK1 ? (
-                  getTask1Digits().map((d, i) => (
-                    <div key={i} className="flex flex-col items-center gap-3">
-                      <SevenSegment bits={(d.includes('.') ? '1' : '0') + (SEGMENT_MAP[d[0]] || '00000000').substring(1)} />
-                      <span className="text-[8px] font-black text-slate-600 uppercase">Digit {i}</span>
-                    </div>
+                  [params.day[0], params.day[1] + '.', params.stationId[0], params.stationId[1]].map((d, i) => (
+                    <SevenSegment key={i} bits={(d.includes('.') ? '1' : '0') + (SEGMENT_MAP[d[0]] || '00000000').substring(1)} />
                   ))
                 ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <SevenSegment bits={getTask2Display(pressedKey)} />
-                    <span className="text-[8px] font-black text-slate-600 uppercase">Output</span>
-                  </div>
+                  <SevenSegment bits={!pressedKey ? '00000000' : (pressedKey==='*' ? SEGMENT_MAP['c'] : pressedKey==='#' ? SEGMENT_MAP['revC'] : SEGMENT_MAP[pressedKey]) || '00000000'} />
                 )}
               </div>
-
               {activeTask === TaskType.TASK2 && (
-                <div className="grid grid-cols-3 gap-3 w-full max-w-[220px]">
+                <div className="grid grid-cols-3 gap-3">
                   {['1','2','3','4','5','6','7','8','9','*','0','#'].map(k => (
-                    <button 
-                      key={k}
-                      onMouseDown={() => setPressedKey(k)}
-                      onMouseUp={() => setPressedKey(null)}
-                      onMouseLeave={() => setPressedKey(null)}
-                      className="h-14 bg-slate-800 border-b-4 border-slate-950 text-white font-black rounded-xl hover:bg-slate-700 active:translate-y-1 active:border-b-0 transition-all text-xl"
-                    >
-                      {k}
-                    </button>
+                    <button key={k} onMouseDown={() => setPressedKey(k)} onMouseUp={() => setPressedKey(null)} className="h-12 w-14 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 active:bg-indigo-600 active:scale-90 transition-all shadow-md flex items-center justify-center">{k}</button>
                   ))}
                 </div>
               )}
@@ -285,78 +247,98 @@ endmodule`;
         </div>
 
         <div className="lg:col-span-8 space-y-6">
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="flex bg-slate-50 border-b overflow-x-auto">
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden transition-all duration-500">
+            <div className="flex bg-slate-50 border-b">
               {Object.entries(TaskType).map(([key, val]) => (
                 <button 
                   key={val} 
-                  onClick={() => setActiveTask(val as TaskType)}
-                  className={`px-8 py-5 text-sm font-black transition-all whitespace-nowrap ${activeTask === val ? 'bg-white text-indigo-600 border-t-4 border-t-indigo-600' : 'text-slate-400 hover:bg-slate-100'}`}
+                  onClick={() => setActiveTask(val as TaskType)} 
+                  disabled={isAnswering}
+                  className={`px-8 py-5 text-sm font-black transition-all ${activeTask === val ? 'bg-white text-indigo-600 border-t-4 border-t-indigo-600' : 'text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed'}`}
                 >
-                  {val === TaskType.TASK1 ? '試題一：四位數顯示裝置' : '試題二：鍵盤輸入顯示裝置'}
+                  {val === TaskType.TASK1 ? '試題一：四位數顯示' : '試題二：鍵盤偵測'}
                 </button>
               ))}
             </div>
 
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Terminal size={18} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Verilog HDL Code</span>
+            <div className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-4">
+                  <Terminal size={18} className="text-slate-400" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Verilog HDL Source Code</span>
+                  <button onClick={() => setShowHints(!showHints)} className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black transition-all ${showHints ? 'bg-amber-100 text-amber-700' : 'text-slate-400 bg-slate-100 hover:bg-slate-200'}`}><HelpCircle size={12}/> {showHints ? '隱藏提示' : '顯示邏輯提示'}</button>
                 </div>
-                <button 
-                  onClick={handleAnalyze} 
-                  disabled={isAnalyzing}
-                  className={`flex items-center gap-2 px-8 py-3 rounded-full font-black text-white shadow-xl transition-all active:scale-95 ${isAnalyzing ? 'bg-slate-300' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                >
-                  {isAnalyzing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Send size={18}/>}
-                  {isAnalyzing ? '分析中...' : '提交評分'}
-                </button>
               </div>
 
-              <textarea 
-                className="w-full h-[450px] p-8 bg-slate-900 text-emerald-400 font-mono text-sm border-none rounded-[2rem] shadow-inner focus:ring-4 focus:ring-indigo-500/10 outline-none leading-relaxed resize-none overflow-y-auto"
-                value={code}
-                onChange={e=>setCode(e.target.value)}
-                spellCheck={false}
-              />
+              <div className="bg-slate-900 p-8 rounded-[2rem] font-mono text-sm leading-relaxed overflow-y-auto max-h-[500px] border border-slate-800 shadow-inner">
+                {taskData.map((data, idx) => (
+                  <div key={idx} className="flex flex-col gap-1 mb-1 group">
+                    <div className="flex gap-4 items-center">
+                      <span className="w-6 text-slate-700 text-right shrink-0 select-none text-xs group-hover:text-slate-500 transition-colors">{idx + 1}</span>
+                      {isAnswering && blankIndices.includes(idx) ? (
+                        <div className="w-full">
+                          <input 
+                            type="text" 
+                            className={`w-full bg-indigo-900/10 text-indigo-300 border-b-2 border-indigo-500/30 outline-none px-2 py-1 rounded-md transition-all focus:bg-indigo-900/30 focus:border-indigo-400`}
+                            value={userInputs[idx] || ""}
+                            onChange={e => setUserInputs({...userInputs, [idx]: e.target.value})}
+                            placeholder="填寫 Verilog 代碼..."
+                          />
+                        </div>
+                      ) : result && blankIndices.includes(idx) ? (
+                        <div className="w-full">
+                          <div className={`px-2 py-1 rounded-md border-b-2 ${result.blankResults?.find(r=>r.index===idx)?.isCorrect ? 'text-emerald-400 border-emerald-500/30' : 'text-red-400 border-red-500/30 line-through'}`}>
+                            {userInputs[idx] || "(未填寫)"}
+                          </div>
+                          {!result.blankResults?.find(r=>r.index===idx)?.isCorrect && (
+                            <div className="text-emerald-400 text-[10px] font-black mt-2 pl-2 bg-emerald-900/10 py-1 rounded border-l-2 border-emerald-500 animate-in slide-in-from-left-2">
+                              標準語法：{fullCodeLines[idx].trim()}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <pre className={`py-1 transition-colors ${data.code.trim().startsWith('//') ? 'text-slate-600 italic' : 'text-slate-400'}`}>{data.code}</pre>
+                      )}
+                    </div>
+                    {showHints && <div className="pl-10 text-[10px] text-amber-500/50 italic font-bold animate-in slide-in-from-left-4 duration-500 select-none">// {data.hint}</div>}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {result && (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-in slide-in-from-bottom-4 duration-500">
-              <div className="md:col-span-4 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">實作完成度</h3>
-                <div className="relative w-36 h-36 flex items-center justify-center">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 animate-in slide-in-from-bottom-8 pb-10">
+              <div className="md:col-span-4 bg-white p-8 rounded-[2.5rem] border shadow-2xl flex flex-col items-center justify-center text-center group">
+                <span className="text-[10px] font-black text-slate-400 uppercase mb-6 tracking-[0.2em]">本次評核得分</span>
+                <div className="relative w-28 h-28 flex items-center justify-center">
                   <svg className="w-full h-full transform -rotate-90">
-                    <circle cx="72" cy="72" r="64" stroke="#f1f5f9" strokeWidth="12" fill="transparent" />
-                    <circle cx="72" cy="72" r="64" stroke="currentColor" strokeWidth="12" fill="transparent" strokeDasharray={402} strokeDashoffset={402 - (402 * result.score / 100)} className={`${result.score >= 80 ? 'text-emerald-500' : result.score >= 60 ? 'text-amber-500' : 'text-red-500'} transition-all duration-1000 ease-in-out`} />
+                    <circle cx="56" cy="56" r="50" stroke="#f1f5f9" strokeWidth="10" fill="transparent" />
+                    <circle cx="56" cy="56" r="50" stroke="currentColor" strokeWidth="10" fill="transparent" strokeDasharray={314} strokeDashoffset={314 - (314 * result.score / 100)} className={`${result.score === 100 ? 'text-emerald-500' : result.score >= 60 ? 'text-indigo-500' : 'text-amber-500'} transition-all duration-1000 ease-out`} />
                   </svg>
-                  <span className="absolute text-4xl font-black text-slate-800">{result.score}%</span>
+                  <span className="absolute text-4xl font-black text-slate-800 group-hover:scale-110 transition-transform">{result.score}</span>
                 </div>
-                <p className="mt-4 text-xs font-bold text-slate-500">{result.score >= 100 ? '卓越效能！' : result.score >= 60 ? '達到標準' : '仍需調整'}</p>
               </div>
-
-              <div className="md:col-span-8 space-y-4">
-                <div className={`p-6 rounded-3xl border ${result.hasError ? 'bg-red-50 border-red-100 text-red-900' : 'bg-emerald-50 border-emerald-100 text-emerald-900'}`}>
-                  <h4 className="font-black mb-3 flex items-center gap-2">
-                    {result.hasError ? <AlertCircle size={20}/> : <CheckCircle2 size={20}/>}
-                    診斷建議報告
-                  </h4>
-                  <ul className="space-y-2 text-sm">
-                    {result.errors.length > 0 ? result.errors.map((e, i) => <li key={i} className="flex gap-2 leading-relaxed">❌ {e}</li>) : <li className="flex gap-2 text-emerald-600 font-bold">✨ 恭喜！邏輯完美無缺！</li>}
-                    {result.suggestions.map((s, i) => <li key={i} className="flex gap-2 opacity-80 leading-relaxed italic">💡 {s}</li>)}
-                  </ul>
-                </div>
-
-                <div className="bg-slate-800 rounded-3xl overflow-hidden border border-slate-700 shadow-xl">
-                  <div className="px-5 py-3 bg-slate-700/50 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
-                    <div className="flex items-center gap-2"><Trophy size={14} className="text-indigo-400"/> 專家推薦實作示範</div>
-                    <span className="text-slate-500 font-mono">Verilog HDL</span>
+              <div className="md:col-span-8 bg-white p-8 rounded-[2.5rem] border shadow-sm">
+                <h4 className="font-black text-xl flex items-center gap-3 mb-6 text-slate-800">
+                  {result.score === 100 ? <Trophy className="text-yellow-400" size={28} /> : <AlertCircle className="text-indigo-400" size={28} />}
+                  專家診斷建議
+                </h4>
+                <div className="space-y-6">
+                  <div className="flex flex-wrap gap-3">
+                    {result.suggestions.map((s, i) => (
+                      <span key={i} className="text-xs font-black text-indigo-700 bg-indigo-50 px-5 py-3 rounded-2xl border border-indigo-100 flex items-center gap-3 shadow-sm">
+                        <Sparkles size={14} className="text-indigo-400"/> {s}
+                      </span>
+                    ))}
                   </div>
-                  <pre className="p-6 text-[11px] font-mono text-indigo-100 overflow-x-auto max-h-[400px] leading-relaxed">
-                    {result.commentedCode}
-                  </pre>
+                  {result.score < 100 && (
+                    <div className="bg-slate-50 p-4 rounded-2xl border-l-4 border-indigo-200 italic shadow-inner">
+                      <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                        注意：Verilog 極度重視位元數與分號。挑戰期間標籤功能會暫時鎖定以維持練習完整性。
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -364,12 +346,10 @@ endmodule`;
         </div>
       </main>
 
-      <footer className="text-center mt-12 mb-8 text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] flex flex-col items-center gap-2">
-        <div className="flex items-center gap-2">
-          <span>加油加油！預祝考場如魚得水</span>
-          <Sparkles size={12} className="text-indigo-400" />
-        </div>
-        <span>© 2024 Digital Electronics Grade B Exam Assistant</span>
+      <footer className="text-center mt-12 mb-12 text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] flex flex-col items-center gap-3 opacity-60">
+        <div className="flex items-center gap-2"><span>反覆練習，成就數位電子乙級證照之路</span><Heart size={10} className="text-rose-400 fill-rose-400 animate-pulse" /></div>
+        <div className="h-[2px] w-16 bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+        <span>© 2024 DIGITAL B-LEVEL EXPERT TRAINING SYSTEM</span>
       </footer>
     </div>
   );
