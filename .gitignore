@@ -1,0 +1,18 @@
+
+# 系統檔案
+.DS_Store
+Thumbs.db
+*.log
+
+# 本地環境變數
+.env
+.env.local
+
+# 編輯器設定
+.vscode/
+.idea/
+
+# 建置產物 (如果有的話)
+dist/
+build/
+node_modules/
