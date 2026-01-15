@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
+import {
   Terminal, Cpu, Trophy, Settings, X, Send,
   PartyPopper, Sparkles, Heart, Timer, Play, HelpCircle,
   RotateCcw, AlertCircle
@@ -20,12 +20,12 @@ const ENCOURAGING_MESSAGES = [
 const App: React.FC = () => {
   const [activeTask, setActiveTask] = useState<TaskType>(TaskType.TASK1);
   const [params, setParams] = useState<ExamParams>({ day: '10', stationId: '05' });
-  const [refreshNonce, setRefreshNonce] = useState(0); 
-  
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
   const [isAnswering, setIsAnswering] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [showHints, setShowHints] = useState(false);
-  
+
   const [blankIndices, setBlankIndices] = useState<number[]>([]);
   const [userInputs, setUserInputs] = useState<Record<number, string>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -42,7 +42,7 @@ const App: React.FC = () => {
   const taskData = useMemo(() => {
     const dd = params.day.padStart(2, '0');
     const ss = params.stationId.padStart(2, '0');
-    
+
     if (activeTask === TaskType.TASK1) {
       return [
         { code: "module no1(input ck, output reg[3:0] s, output reg[7:0] seg);", hint: "定義 I/O" },
@@ -102,7 +102,7 @@ const App: React.FC = () => {
 
   // 開始目前所選題目的挑戰
   const handleStartChallenge = () => {
-    setRefreshNonce(prev => prev + 1); 
+    setRefreshNonce(prev => prev + 1);
     setIsAnswering(true);
     setResult(null);
     setSeconds(0);
@@ -117,7 +117,7 @@ const App: React.FC = () => {
   const handleGrade = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setIsAnalyzing(true);
-    
+
     const blankResults = blankIndices.map(idx => {
       const userVal = (userInputs[idx] || "").trim();
       const correctVal = fullCodeLines[idx].trim();
@@ -163,7 +163,7 @@ const App: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="px-6 py-5 bg-slate-50 border-b flex items-center justify-between">
               <h3 className="font-bold text-slate-700 flex items-center gap-2"><Settings size={20} className="text-indigo-500" /> 設定</h3>
-              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
             </div>
             <div className="p-6">
               <label className="text-xs font-black text-slate-400 uppercase mb-2 block">API Key (可選)</label>
@@ -176,16 +176,16 @@ const App: React.FC = () => {
 
       <header className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-xl"><Cpu size={32}/></div>
+          <div className="p-3 bg-indigo-600 rounded-2xl text-white shadow-xl"><Cpu size={32} /></div>
           <div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
               數位電子乙級：術科練習
-              {(isAnswering || result) && <span className="flex items-center gap-2 bg-indigo-100 px-3 py-1 rounded-full text-indigo-700 text-sm animate-pulse ml-2 font-mono"><Timer size={14}/> {Math.floor(seconds/60)}:{(seconds%60).toString().padStart(2,'0')}</span>}
+              {(isAnswering || result) && <span className="flex items-center gap-2 bg-indigo-100 px-3 py-1 rounded-full text-indigo-700 text-sm animate-pulse ml-2 font-mono"><Timer size={14} /> {Math.floor(seconds / 60)}:{(seconds % 60).toString().padStart(2, '0')}</span>}
             </h1>
             <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">Select Task & Start Random Challenge</p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-4">
           {!isAnswering && !result ? (
             <button onClick={handleStartChallenge} className="flex items-center gap-3 px-8 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-200 transition-all active:scale-95 group">
@@ -213,31 +213,36 @@ const App: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-500">日期 (DD)</label>
-                <input type="text" maxLength={2} value={params.day} onChange={e=>setParams({...params, day: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border rounded-xl font-black text-center disabled:opacity-50 transition-all focus:border-indigo-500 outline-none" disabled={isAnswering} />
+                <input type="text" maxLength={2} value={params.day} onChange={e => setParams({ ...params, day: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border rounded-xl font-black text-center disabled:opacity-50 transition-all focus:border-indigo-500 outline-none" disabled={isAnswering} />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-500">崗位 (SS)</label>
-                <input type="text" maxLength={2} value={params.stationId} onChange={e=>setParams({...params, stationId: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border rounded-xl font-black text-center disabled:opacity-50 transition-all focus:border-indigo-500 outline-none" disabled={isAnswering} />
+                <input type="text" maxLength={2} value={params.stationId} onChange={e => setParams({ ...params, stationId: e.target.value })} className="w-full px-4 py-3 bg-slate-50 border rounded-xl font-black text-center disabled:opacity-50 transition-all focus:border-indigo-500 outline-none" disabled={isAnswering} />
               </div>
             </div>
           </section>
 
           <section className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-10"><Cpu size={64} className="text-white"/></div>
+            <div className="absolute top-0 right-0 p-4 opacity-10"><Cpu size={64} className="text-white" /></div>
             <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-8 text-center relative z-10">硬體模擬看板</h2>
             <div className="flex flex-col items-center gap-8 relative z-10">
               <div className="bg-slate-800 p-8 rounded-[2rem] border-[6px] border-slate-700 flex gap-4 shadow-inner">
                 {activeTask === TaskType.TASK1 ? (
-                  [params.day[0], params.day[1] + '.', params.stationId[0], params.stationId[1]].map((d, i) => (
-                    <SevenSegment key={i} bits={(d.includes('.') ? '1' : '0') + (SEGMENT_MAP[d[0]] || '00000000').substring(1)} />
-                  ))
+                  // Safe processing for display (ensure always 2 chars)
+                  (() => {
+                    const dd = params.day.padStart(2, '0');
+                    const ss = params.stationId.padStart(2, '0');
+                    return [dd[0], dd[1] + '.', ss[0], ss[1]].map((d, i) => (
+                      <SevenSegment key={i} bits={(d.includes('.') ? '1' : '0') + (SEGMENT_MAP[d[0]] || '00000000').substring(1)} />
+                    ));
+                  })()
                 ) : (
-                  <SevenSegment bits={!pressedKey ? '00000000' : (pressedKey==='*' ? SEGMENT_MAP['c'] : pressedKey==='#' ? SEGMENT_MAP['revC'] : SEGMENT_MAP[pressedKey]) || '00000000'} />
+                  <SevenSegment bits={!pressedKey ? '00000000' : (pressedKey === '*' ? SEGMENT_MAP['c'] : pressedKey === '#' ? SEGMENT_MAP['revC'] : SEGMENT_MAP[pressedKey]) || '00000000'} />
                 )}
               </div>
               {activeTask === TaskType.TASK2 && (
                 <div className="grid grid-cols-3 gap-3">
-                  {['1','2','3','4','5','6','7','8','9','*','0','#'].map(k => (
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map(k => (
                     <button key={k} onMouseDown={() => setPressedKey(k)} onMouseUp={() => setPressedKey(null)} className="h-12 w-14 bg-slate-800 text-white font-black rounded-xl hover:bg-slate-700 active:bg-indigo-600 active:scale-90 transition-all shadow-md flex items-center justify-center">{k}</button>
                   ))}
                 </div>
@@ -250,9 +255,9 @@ const App: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden transition-all duration-500">
             <div className="flex bg-slate-50 border-b">
               {Object.entries(TaskType).map(([key, val]) => (
-                <button 
-                  key={val} 
-                  onClick={() => setActiveTask(val as TaskType)} 
+                <button
+                  key={val}
+                  onClick={() => setActiveTask(val as TaskType)}
                   disabled={isAnswering}
                   className={`px-8 py-5 text-sm font-black transition-all ${activeTask === val ? 'bg-white text-indigo-600 border-t-4 border-t-indigo-600' : 'text-slate-400 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed'}`}
                 >
@@ -266,7 +271,7 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-4">
                   <Terminal size={18} className="text-slate-400" />
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Verilog HDL Source Code</span>
-                  <button onClick={() => setShowHints(!showHints)} className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black transition-all ${showHints ? 'bg-amber-100 text-amber-700' : 'text-slate-400 bg-slate-100 hover:bg-slate-200'}`}><HelpCircle size={12}/> {showHints ? '隱藏提示' : '顯示邏輯提示'}</button>
+                  <button onClick={() => setShowHints(!showHints)} className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black transition-all ${showHints ? 'bg-amber-100 text-amber-700' : 'text-slate-400 bg-slate-100 hover:bg-slate-200'}`}><HelpCircle size={12} /> {showHints ? '隱藏提示' : '顯示邏輯提示'}</button>
                 </div>
               </div>
 
@@ -277,20 +282,20 @@ const App: React.FC = () => {
                       <span className="w-6 text-slate-700 text-right shrink-0 select-none text-xs group-hover:text-slate-500 transition-colors">{idx + 1}</span>
                       {isAnswering && blankIndices.includes(idx) ? (
                         <div className="w-full">
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             className={`w-full bg-indigo-900/10 text-indigo-300 border-b-2 border-indigo-500/30 outline-none px-2 py-1 rounded-md transition-all focus:bg-indigo-900/30 focus:border-indigo-400`}
                             value={userInputs[idx] || ""}
-                            onChange={e => setUserInputs({...userInputs, [idx]: e.target.value})}
+                            onChange={e => setUserInputs({ ...userInputs, [idx]: e.target.value })}
                             placeholder="填寫 Verilog 代碼..."
                           />
                         </div>
                       ) : result && blankIndices.includes(idx) ? (
                         <div className="w-full">
-                          <div className={`px-2 py-1 rounded-md border-b-2 ${result.blankResults?.find(r=>r.index===idx)?.isCorrect ? 'text-emerald-400 border-emerald-500/30' : 'text-red-400 border-red-500/30 line-through'}`}>
+                          <div className={`px-2 py-1 rounded-md border-b-2 ${result.blankResults?.find(r => r.index === idx)?.isCorrect ? 'text-emerald-400 border-emerald-500/30' : 'text-red-400 border-red-500/30 line-through'}`}>
                             {userInputs[idx] || "(未填寫)"}
                           </div>
-                          {!result.blankResults?.find(r=>r.index===idx)?.isCorrect && (
+                          {!result.blankResults?.find(r => r.index === idx)?.isCorrect && (
                             <div className="text-emerald-400 text-[10px] font-black mt-2 pl-2 bg-emerald-900/10 py-1 rounded border-l-2 border-emerald-500 animate-in slide-in-from-left-2">
                               標準語法：{fullCodeLines[idx].trim()}
                             </div>
@@ -328,7 +333,7 @@ const App: React.FC = () => {
                   <div className="flex flex-wrap gap-3">
                     {result.suggestions.map((s, i) => (
                       <span key={i} className="text-xs font-black text-indigo-700 bg-indigo-50 px-5 py-3 rounded-2xl border border-indigo-100 flex items-center gap-3 shadow-sm">
-                        <Sparkles size={14} className="text-indigo-400"/> {s}
+                        <Sparkles size={14} className="text-indigo-400" /> {s}
                       </span>
                     ))}
                   </div>
