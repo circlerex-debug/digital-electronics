@@ -365,6 +365,7 @@ const App: React.FC = () => {
       <footer className="text-center mt-12 mb-12 text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] flex flex-col items-center gap-3 opacity-60">
         <div className="flex items-center gap-2"><span>反覆練習，成就數位電子乙級證照之路</span><Heart size={10} className="text-rose-400 fill-rose-400 animate-pulse" /></div>
         <div className="h-[2px] w-16 bg-gradient-to-r from-transparent via-slate-300 to-transparent"></div>
+        <span>霧峰農工 睿懌老師 製作</span>
         <span>© 2024 DIGITAL B-LEVEL EXPERT TRAINING SYSTEM</span>
       </footer>
     </div>
