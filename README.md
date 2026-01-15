@@ -1,33 +1,55 @@
+# 數位電子乙級考試小幫手 (Digital Electronics Level B Exam Helper)
 
-# 數位電子乙級 Verilog 練習助手 🎓
+這是一個協助準備數位電子乙級檢定的輔助工具，提供試題練習與相關資訊。
 
-這是一個專為「數位電子乙級」術科檢定開發的 AI 練習平台。整合了 **Gemini 2.5/3.0** 模型，為應檢人提供即時的 Verilog 代碼診斷與硬體模擬。
+## 🚀 專案設置 (Project Setup)
 
-## ✨ 主要功能
+### 系統需求 (Prerequisites)
+- **Node.js**: 建議使用 v18 或更高版本 (Recommended v18+ for Vite 6)
+- **npm** or **yarn** or **pnpm**
 
-- **試題一模擬**：四位數顯示裝置（日期.崗位編號 格式）。
-- **試題二模擬**：3x4 鍵盤掃描邏輯驗證，包含特殊符號 `*` (c) 與 `#` (revC)。
-- **AI 專家診斷**：自動評分、抓錯，並提供中文註解的正確示範代碼。
-- **熱血加油打氣**：設定 API Key 時提供隨機鼓勵語錄，陪伴您備考。
+### 安裝依賴 (Install Dependencies)
+```bash
+npm install
+```
 
-## 🚀 如何使用
+### 開發模式 (Development)
+啟動本地開發伺服器：
+```bash
+npm run dev
+```
 
-1. 將本專案上傳至 GitHub。
-2. 開啟 `index.html`。
-3. 點擊右上角 **設定 (Settings)** 圖示。
-4. 貼上您的 [Google Gemini API Key](https://aistudio.google.com/app/apikey)。
-5. 開始撰寫代碼並提交評分！
+### 建置專案 (Build)
+產生正式環境用的靜態檔案 (位於 `dist/` 資料夾)：
+```bash
+npm run build
+```
 
-## 🛠 技術棧
+## 🛠 技術堆疊 (Tech Stack)
+- **React 19**: UI 框架
+- **Vite**: 建置工具
+- **TypeScript**: 靜態型別
+- **Lucide React**: 圖示庫
+- **Google GenAI**: AI 輔助功能 (若有使用)
 
-- **React / TypeScript**: 介面開發。
-- **Tailwind CSS**: 現代化 UI 設計。
-- **Lucide React**: 圖標系統。
-- **Google GenAI SDK**: AI 診斷核心。
+## 📦 部署 (Deployment)
 
-## ⚠️ 安全提示
+本專案已設定 **GitHub Actions** 自動部署至 **GitHub Pages**。
 
-本專案使用 `LocalStorage` 儲存 API Key，不會上傳至伺服器。請勿將您的 API Key 直接寫死在 `App.tsx` 的程式碼中，以免公開於 GitHub 造成額外費用。
+### 設定步驟
+1. 進入 GitHub Repository 的 **Settings**。
+2. 點擊左側選單的 **Pages**。
+3. 在 **Build and deployment** 區塊：
+    - **Source**: 選擇 `GitHub Actions`。
+4. 之後每次推送到 `main` 分支時，將會自動觸發部署流程。
 
----
-**加油！祝您順利取得乙級證照！🔥**
+## 📂 專案結構 (Project Structure)
+```
+.
+├── src/                # 原始碼
+├── public/             # 靜態資源
+├── .github/workflows/  # CI/CD 設定
+├── dist/               # 建置產出 (Build Output)
+├── package.json        # 專案設定與依賴
+└── vite.config.ts      # Vite 設定
+```
